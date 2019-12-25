@@ -1,0 +1,326 @@
+```{r include=FALSE}
+library(readr)
+library(ggplot2)
+library(ggplot2)
+data_cleaned <- read.csv("./Boats_Cleaned_dataset.csv", na.strings=c("","NA"))
+drops <- c("X")
+data_cleaned <- data_cleaned[,!(names(data_cleaned) %in% drops)]
+remove(drops)
+```
+
+
+# Basic Statistical Summaries  
+
+Let us first explore the statistical summaries for the various data points in our dataset.
+
+```{r}
+summary(data_cleaned)
+```
+
+From above summary statistics, we know that the columns `type`, `boatClass`, `make`, `model`, `condition`, `hullMaterial`, `fuelType`, `engineCategory`, `city`,`state`, `zip` are text based categorical variables. `price`, `bean_ft`, `length_ft`, `total_hp` are continuous numeric variables. `year`,`created_year`, `created_month`, `numEngines` are numeric categorical variables and `created_date` is a date variable.
+
+## Price variable Anamolies
+Our output variable **`price`** has the following statistical sumamries
+
+- Mean : `r mean(data_cleaned$price)`
+- Median: `r median(data_cleaned$price)`
+- Std. Dev.: `r sd(data_cleaned$price)`
+- 5% and 95% quantiles: `r quantile(data_cleaned$price, probs = c(0.05, 0.95))`
+- Min Value: `r min(data_cleaned$price)`
+- Max value: `r max(data_cleaned$price)`
+
+It is to be noted that the price includes prices for both new and used boats. It is important to keep this in mind when making statistical inferences on the price variable.
+
+
+Mean is greater than median, which means the data is most likely very heavily left skewed i.e. we have a lot of outliers that have a very high price point. This can be due to the used boats being included in the stats summary. We can obtain statistical summaries seperately for used and new boats to see if this skewness is still present.
+
+### Price for used boats
+
+
+- Mean : `r mean(data_cleaned$price[data_cleaned$condition == "used"])`
+- Median: `r median(data_cleaned$price[data_cleaned$condition == "used"])`
+- Std. Dev.: `r sd(data_cleaned$price[data_cleaned$condition == "used"])`
+- 5% and 95% quantiles: `r quantile(data_cleaned$price[data_cleaned$condition == "used"], probs = c(0.05, 0.95))`
+- Min Value: `r min(data_cleaned$price[data_cleaned$condition == "used"])`
+- Max value: `r max(data_cleaned$price[data_cleaned$condition == "used"])`
+
+
+### Price for new boats
+
+
+- Mean : `r mean(data_cleaned$price[data_cleaned$condition == "new"])`
+- Median: `r median(data_cleaned$price[data_cleaned$condition == "new"])`
+- Std. Dev.: `r sd(data_cleaned$price[data_cleaned$condition == "new"])`
+- 5% and 95% quantiles: `r quantile(data_cleaned$price[data_cleaned$condition == "new"], probs = c(0.05, 0.95))`
+- Min Value: `r min(data_cleaned$price[data_cleaned$condition == "new"])`
+- Max value: `r max(data_cleaned$price[data_cleaned$condition == "new"])`
+
+
+We still see the same skewness in the data. It appears that a few boats are listed for very very high prices.This is also evienced by the max value being 2 to 3 magnitudes larger than the mean and median values.
+
+Confirming our hypothesis using plots. 
+
+### Price Plots - All Boats
+
+**Histogram**
+```{r fig.width=5, fig.height=4, echo=FALSE}
+ggplot(data_cleaned, aes(x=price))+
+geom_histogram(bins = 10, alpha=0.75)+ theme_minimal()
+```
+
+**QQ Plot**
+```{r fig.width=5, fig.height=4, echo=FALSE}
+qqnorm(data_cleaned$price)
+qqline(data_cleaned$price)
+```
+
+As evidenced by the plots above we have a very skewed dataset. One way to mitigate this is to use a log scale on the price variable. This reduces our intuitive understanding of the prices, but overall gives us a much better variable for building our models.
+
+
+### Log Price normality verification.
+
+Let us verify if the `log(price)` is fairly normal.
+
+**Histogram**
+```{r fig.width=5, fig.height=4, echo=FALSE}
+ggplot(data_cleaned, aes(x=log(price)))+
+geom_histogram(bins = 20, alpha=0.75)+ theme_minimal()
+```
+
+
+**QQ Plot**
+```{r fig.width=5, fig.height=4, echo=FALSE}
+qqnorm(log(data_cleaned$price))
+qqline(log(data_cleaned$price))
+```
+
+The price variable is fairly normal in the Inter quartile range (-2,2) but still has outliers in the sections beyond this range.
+
+We can get a better look at the outliers using a box plot.
+
+```{r fig.width=5, fig.height=4, echo=FALSE}
+ggplot(data_cleaned, aes(y=log(price), x=condition))+
+geom_boxplot(alpha=0.75)+ theme_minimal()
+```
+
+These outliers can cause significant hinderences to model building. We need to make a decision on if it is possible to eliminate some of these outliers. To do this we will have to take a closer look at the outliers.
+
+
+## Outliers Removal
+
+We can define outliers in multiple ways, we can use IQR and set a range on the IQR (usually $\pm 1.5$ ) outside which lie the outliers. However, since we can make certan assumptions on the data, we can set a hard bounds on the price to determine outliers. For the pueposes of this analysis we will define a lower bound on price of 5,000 and an upper bound of 200,000. Anything outside this limit is considered an outlier.
+
+```{r fig.width=5, fig.height=4, echo=FALSE}
+library(dplyr)
+data_noOutliers <- filter(data_cleaned, price >= 5000 & price <=200000)
+
+ggplot(data_noOutliers, aes(x=log(price)))+
+geom_histogram(bins = 20, alpha=0.75)+ theme_minimal()
+```
+
+```{r fig.width=5, fig.height=4, echo=FALSE}
+qqnorm(log(data_noOutliers$price))
+qqline(log(data_noOutliers$price))
+
+```
+
+Removing the outliers nwo gives us a much more manageable and more normal distribution. Removing the outliers, gives us a dataset with `r nrow(data_noOutliers)` data points. We will be using this in our analysis going forward. 
+
+
+
+\pagebreak [4]
+
+
+
+# Additional columns for analysis
+## Adding a Seller Volumn
+
+To perform analysis on the seller volumn column, we will add a count of number of listings by `sellerID`. To do this we can employ the `data.table` library.
+
+```{r}
+library(data.table)
+temp_table <- data.table(data_noOutliers)
+data_noOutliers <- temp_table[,sellerVolume:=.N,by=sellerId]
+```
+
+
+## Market Volume analysis - Market Size by State
+To perfrom analysis on how the market size affets state, we will include a count of the number of listings by `state`. This will be called `marketSize`
+```{r}
+temp_table <- data.table(data_noOutliers)
+data_noOutliers <- temp_table[,marketSize:=.N,by=state]
+```
+
+
+
+
+# Graphical Visualizations
+
+## Number of listings by various categories
+
+### State
+
+
+```{r fig.width=6, fig.height=8, echo=FALSE}
+
+ggplot(data_noOutliers, aes(state, fill=condition,borders=state))+
+  coord_flip()+
+stat_count(alpha=0.75)+ theme_minimal()+
+  theme(
+    panel.grid.major = element_blank(),
+    panel.border = element_blank()) 
+```
+
+
+### Mapping the listing distributions geographically
+
+```{r child = 'mapviz.Rmd'}
+```
+
+
+### Fuel Type
+Fuel Type has the following categories: 
+
+```{r} 
+unique(data_noOutliers$fuelType)
+```
+
+```{r fig.width=6, fig.height=2, echo=FALSE}
+
+ggplot(data_noOutliers, aes(fuelType, fill=condition,borders=state))+
+  coord_flip()+
+stat_count(alpha=0.75)+ theme_minimal()+
+  theme(
+    panel.grid.major = element_blank(),
+    panel.border = element_blank()) 
+```
+
+
+
+### Age of the boat
+
+To find the age of the boat let us create a variable `age` defined in years as `2019-year`. 
+
+```{r}
+data_noOutliers$age <- 2019 - data_noOutliers$year
+summary(data_noOutliers$age)
+```
+
+It is interesting to see a -1 in the age, this is because like for cars, a boat can be marketed as a boat year of 2020 in the last few months of 2019. The max year is 109. That is a very old boat, we might want to include a isAntique.
+
+```{r fig.width=5, fig.height=4, echo=FALSE}
+ggplot(data_noOutliers, aes(x=age, fill=condition))+
+geom_histogram(bins = 20, alpha=0.75)+ theme_minimal()
+```
+As expected most of the new boats have a smaller age.
+
+
+
+
+
+
+
+
+
+## Scatter Plots
+
+For the scatter plots, we will look at `log(price)` vs various predictor variables, colored by condition.
+The scatter plots should give us a good idea for how the log(price) vector is distributed along each axis(predictors)
+
+### log(price) vs length
+
+```{r fig.width=4.5, fig.height=3, echo=FALSE}
+ggplot(data=data_noOutliers, aes(x=length_ft, y=log(price), col=condition))+
+  geom_point()
+```
+
+We see a very steep increase in the price as the length increases. This is as we would expect. Longer boats cost more. However, we also see that there are inflection points around 50 ft and 150 feet where the prices first decrease and then increase. This could be due to outliers in length, but could also be attributed to longer boats being undesirable and costing more. If the former is true, then the influence of these points can be detremental to a linear model and we should consider adding a filter on these. If the latter is true, we might want to use a GAM model.
+
+### log(price) vs age
+```{r fig.width=4.5, fig.height=3, echo=FALSE}
+ggplot(data=data_noOutliers, aes(x=age, y=log(price), col=condition))+
+  geom_point()
+```
+
+No clear trend is visible in the plot. 
+
+### log(price) vs type
+```{r fig.width=4.5, fig.height=3, echo=FALSE}
+ggplot(data=data_noOutliers, aes(x=type, y=log(price), col=condition))+
+  geom_point()
+```
+
+Unpowered boats tend to have a lower price.
+
+### log(price) vs fuelType
+```{r fig.width=4.5, fig.height=3, echo=FALSE}
+ggplot(data=data_noOutliers, aes(x=fuelType, y=log(price), col=condition))+
+  geom_point()+geom_boxplot()
+```
+This is an interesting relationship. Diesel boats are clearly the most expensive. Newer electric boats seem to cost less than the older electric boats. Not much difference is seen between older and newer boats for other fuel types.
+
+
+
+
+
+### log(price) vs engineCategory
+```{r fig.width=7.5, fig.height=4, echo=FALSE}
+ggplot(data=data_noOutliers, aes(x=engineCategory, y=log(price), col=condition))+
+  geom_point()+geom_boxplot()
+```
+
+For electric boats, we see the same effect we saw in fuelType as expected. Other engine types have variation in price by the condition too.
+
+### log(price) vs totalHP of engines
+```{r fig.width=4.5, fig.height=3, echo=FALSE}
+ggplot(data=data_noOutliers, aes(x=totalHP, y=log(price), col=condition))+
+  geom_point()
+```
+Some of our data points have missing values for totalHP( `r nrow(data_noOutliers[is.na(data_noOutliers$totalHP)])` rows). These have been removed in the plot above. We see a clear increase in price as the totalHP increases. The impact is different based on the condition of the boat.
+
+
+### log(price) vs sellerVolume of engines
+
+```{r fig.width=4.5, fig.height=3, echo=FALSE}
+ggplot(data=data_noOutliers, aes(x=sellerVolume, y=log(price), col=condition))+
+  geom_point()
+```
+
+No real trend is visible from the scatter plot above, the seller volume seems to have little to no impact on the pricing.
+
+### log(price) vs marketSize of engines
+
+```{r fig.width=4.5, fig.height=3, echo=FALSE}
+ggplot(data=data_noOutliers, aes(x=marketSize, y=log(price), col=condition))+
+  geom_point()
+```
+
+Again, we don't see a clear trend in the market size and price variation. 
+
+### log(price) vs hullMaterial of engines
+
+```{r fig.width=7.5, fig.height=4, echo=FALSE}
+ggplot(data=data_noOutliers, aes(x=hullMaterial, y=log(price), col=condition))+
+  geom_point()+geom_boxplot()
+```
+There is price variation based on hullMaterial, which is as expected. Steel boats have a higher price compared to others. Fiberglass and composite type hulls follow this and pvc brings up the rear.
+
+
+
+###log(price) vs. Make
+Since we have a large number of make types in the dataset, we will consider the top 5 and replace the rest with `(other)` fro this analysis.
+
+```{r}
+topMakes <- c("Tracker", "Sun Tracker", "Bennington", "Sea Ray", "Yamaha Boats")
+data_noOutliers$make.top5 <- ifelse(data_noOutliers$make %in% topMakes, as.character(data_noOutliers$make), "(other)" )
+```
+
+
+```{r fig.width=7.5, fig.height=4, echo=FALSE}
+ggplot(data=data_noOutliers, aes(x=make.top5, y=log(price), col=condition))+
+  geom_point()+geom_boxplot()
+```
+
+
+We see that some makes cost less than the others. Tracker costs considerably less than Sea Ray. The resale value of the boats ( new vs used) is also different for the different makes.
+

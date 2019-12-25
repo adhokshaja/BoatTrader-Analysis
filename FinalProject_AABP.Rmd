@@ -1,0 +1,293 @@
+---
+output: 
+  pdf_document:
+    highlight: tango
+    fig_caption: true
+    toc: false
+title: "BoatTrader Project"
+subtitle: "Statistical Data Mining - Final Project"
+author: Adhokshaja Achar Budihal Prasad
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+fontsize: 11pt
+seriffont: Computer Modern Sans Serif
+monofont: Fira Mono 
+endnote: no
+geometry: margin=1in
+header-includes:
+   - \usepackage[toc,page]{appendix}
+---
+
+
+\pagenumbering{gobble}
+
+```{r set-options, echo=FALSE, cache=FALSE,  include=FALSE}
+require(knitr)
+options(width=80)
+opts_chunk$set(comment = "", warning = FALSE, message = FALSE, echo = TRUE, tidy = TRUE, size="small", 
+               tidy.opts=list(width.cutoff=80))
+```
+
+\vspace*{\fill}
+
+
+\noindent
+\hspace{-0.5in}\makebox[\textwidth]{\includegraphics[width=700pt]{./report-resources/images/boats-at-marina.jpg}}
+
+\newpage
+\setcounter{tocdepth}{2}
+\tableofcontents{}
+\newpage
+\pagenumbering{arabic}
+\setcounter{page}{1}
+
+\part*{Introduction}
+
+# Executive Summary
+The premise of the project is to mine the data available on [BoatTrader](https://www.boattrader.com/) to build a comprehensive model for boat pricing based on various attributes of the boat and geographic variations. BoatTrader is a large marketplace for buying and selling boats, engines and personal watercrafts. As such, BoatTrader offers a wide variety of tools to search and filter boats. It also provides a large set of attributes for boats along with their prices.
+For this project we are extracting the data for the boats from the website; visualizing and applying statistical analysis to the attributes; buiding a model to predit boat price given the attributes.  
+
+# Report organization
+This report is organized into four sections \textemdash Data Extraction and cleanup, Data Exploration and Visualization, Statistical Analyses and Models, Summary and Conclusion.
+
+Data Extraction and Cleanup section explains the processes employed to extract/mine the data from the website using tools and scripts. Assumptions made, limitations of the approach employed are also discusses. The final part of this section includes generating a data set that can be used for further analysis.
+
+Data Exploration and Visualization section highlights the various data points, their meaning and relevance to the analyses being performed. Various charts, maps and other visualizations are also included in this section to better understand the distribution and statistical characterstics of the data points.
+
+Statistical Analyses and Models sections discusses various approaches to categorize the data and building and evaluating multiple models for predicting the price of the boat given its attributes.
+
+Conclusion and summary section includes summarized analysis of the various models, choice of a model and discussion on the limitations of using approaches described in the preceding sections. Future directions on how the models and data extraction approach can be improved are also included.
+
+
+\newpage
+\part{Data Extraction and Cleanup}
+
+```{r child = 'DataScraping_Cleanup.Rmd'}
+```
+
+
+\newpage
+\part{Data Exploration and Visualization}
+
+```{r child = 'Summary_Visualizations.Rmd'}
+```
+
+\newpage
+\part{Statistical Models}
+
+```{r child = 'models.Rmd'}
+```
+
+
+\newpage
+\part{Summary and Conclusion}
+
+We created a few models to explain the variation in boat prices. The price variable was log transformed before building the models to make sure we had a fairly normal dependent variable.
+We settled on two models - one linear model, one Generalized Additive Model. The models were able to explain `r floor(summary(mod.lm.best)$r.squared*100000/10)/100`% and `r round(summary(mod.gam.best)$dev.expl*100,2)`% of the variation in the log transformed price.
+We found that the following predictor variables were significant to modeling the price
+
+    - Length of the boat 
+    - Age of the boat
+    - Was the boat length >65ft and it's interaction with the length of the boat
+    - Was the boat older than 50 years and it's interaction with the age of the boat
+    - Total Horse power of the engines
+    - Condition of the boat and it's interaction with the length of the boat
+    - Hull material
+    - MarketSize
+    - SellerVolume
+    - Seasonality
+
+
+The GAM model was better in comparision to the linear model with a lower AIC and better r-squared value.
+
+```{r}
+AIC(mod.lm.best,mod.gam.best)
+```
+
+Beam length, fuelType and engine categories are significant predictors that can be incude only if we are certain to get those in every listing, which may not be always true.
+
+An alternative GAM model was produced that included fuelType and was able to explain `r round(summary(mod.gam.alt)$dev.expl*100,2)`% of the variation in log price, but it sacrificed data points.
+
+Market size had an impact on price in isolation. Larger markets tended to have slightly higher prices. We also saw that there is an impact of seller volume on the price, however, the variation in seller volume is large and the GAM for sellerVolume showed a wide variety of imapct on the price.
+
+
+We determined which points had high leverage on the variation in log transformed price and discussed ways we could go about eliminating them.
+
+
+## Impact of individual parameters on the price of the boat in linear model
+
+    - *Length* - The price increases with the length of the boat for smaller boats, but this impact reverses for boats over 50 ft
+    - *Age* - The price decreases as age increases for boats less than 65 years, this trend reverses for older boats
+    - *Horse Power* - Price increase as the horse power increases
+    - While used boats sell for a lower price than newer boats, the price of boat with respect to length increases faster for used boats than newer boats.
+    - Hypalon, steel and wood Hulled boats sell for a lot higher than the other hull materials, PVC boats are expected to cost less than other hull types.
+    - Larget the market, higher the price
+    - More boats a seller lists, lower the boat prices.
+    - Boats are listed for a higher price in Q3 of the year.
+
+## Future work
+
+This project was done on data mined in from boattrader listed by date. Duw to the restrictions on how much data could be extracted from the website, we only have a small subset of all the data available. Due to this, the analysis presented here could be biased due to sampling and could vary based on the date at which the data is extracted. For a comprehensive analysis, a more stable, larger dataset could be considered for further analysis. 
+
+Some outliers were identified in the analysis and some techniques were discussed as good candidates to consider for the future. An analysis on Market Size based on zip code and a yearly trend analysis grouped by make or length of the boat combined could give insight into other market forces involved in determining price.
+
+The best model chosen (GAM) left over 20% of the variation in price un explained. There might be other factors that could determine the price. Further analysis could lead to identification of such factors. 
+
+
+\newpage
+
+
+\addcontentsline{toc}{part}{Appendices}
+\addtocontents{toc}{\protect\setcounter{tocdepth}{1}}
+
+\setcounter{part}{0}
+\renewcommand{\partname}{Appendix}
+\renewcommand\thepart{\Alph{part}}
+\part{Scraping Data from API}
+  # JavaScript code for Extracting Data from API
+```js
+    const  path = require('path');
+    const fs = require('fs');
+    var url = require('url');
+    const fetch = require('node-fetch');
+    const csvWriter = require('fast-csv');
+    
+    
+    const apiBaseUri = 'https://api-gateway.boats.com/api-boattrader-client/app/search/boat';
+    const apikey = '8b08b9bc353c494a80c60fb86debfc56';
+    const queryOptions = {
+        apikey,
+        country: 'US',
+        facets: 'country,state,make,model,class,fuelType,hullMaterial,stateCity',
+        fields: `id,make,model,year,specifications.dimensions.lengths.nominal.ft,
+        specifications.dimensions.beam.ft,specifications.weights.dry.lb,
+        location.address,aliases,price.hidden,price.type.amount.USD,portalLink,class,
+        condition,date.created,type,fuelType,hull.material,propulsion.engines`,
+        useMultiFacetedFacets: true,
+        sort: 'modified-asc',
+        price: '0-'
+    };
+    
+    /**
+     * Fetches data and returns a json object
+     * @param {number} page Page Number
+     * @param {number} pageSize Page Size
+     */
+    const fetchData = async (page, pageSize=10) => {
+        console.log(`Fetching Data for ${page}`);
+        let queryString = url.format({query: {...queryOptions, page,pageSize}});
+        const apiData = await fetch(`${apiBaseUri}${queryString}`)
+        .catch(err => console.error(`Error fetching Data ${err}`))
+        .then(res => res.json())
+        .catch(err => console.error(`Error serilizing Data ${err}`));
+    
+        const parsedData = apiData.search.records.map(boat => {
+            let {
+                id,
+                condition,
+                make,
+                model,
+                year,
+                portalLink,
+                type,
+                fuelType,
+            } = boat;
+    
+            let formatted =  {
+                id,
+                url: portalLink,
+                type,
+                boatClass:boat['class'],
+                make,
+                model,
+                year,
+                condition,
+                length_ft: boat.specifications.dimensions.lengths 
+                      && boat.specifications.dimensions.lengths.nominal.ft,
+                beam_ft: boat.specifications.dimensions.beam 
+                      && boat.specifications.dimensions.beam.ft,
+                dryWeight_lb: boat.specifications.weights 
+                      && boat.specifications.weights.dry.lb,
+                created: boat.date.created,
+                hullMaterial: boat.hull.material,
+                fuelType,
+                numEngines: boat.propulsion.engines.length,
+                totalHP:null,
+                maxEngineYear: null,
+                minEngineYear: null,
+                engineCategory:'',
+                price: boat.price && boat.price.type 
+                  && boat.price.type.amount.USD,
+                ...boat.location.address
+            };
+    
+            if (boat.propulsion.engines && boat.propulsion.engines.length>0){
+    
+                formatted.totalHP = boat.propulsion.engines.reduce((acc, i) => { 
+                        return !i.power? acc: acc + i.power.hp
+                    },
+                0);
+                
+                const {min,max} = boat.propulsion.engines.reduce((acc, i) => 
+                { 
+                    acc.max = acc.max > i.year ? acc.max:i.year;
+                    acc.min = acc.min < i.year ? acc.min : i.year;
+                    return acc;
+                }, {min:2500,max:0});
+    
+    
+                formatted.maxEngineYear = max;
+                formatted.minEngineYear = min;
+    
+                formatted.engineCategory = boat.propulsion.engines.reduce((acc, i)=>{
+                    return acc === '' || acc === i.category ? i.category : 'multiple';
+                },'');
+    
+            }
+    
+            return formatted;
+        });
+    
+        return parsedData;
+    }
+    const startPage = 1;
+    const pageSize = 1000;
+    for (let page = startPage; page <=10; page++){
+        let timeOut = (page - startPage)*20;
+        setTimeout(async () => {
+            let boats = await fetchData(page, pageSize)
+            .catch(err=>console.error(`Page ${page} error: ${err}`));
+            console.log(`Fetched Data for page ${page}`);
+            csvWriter.writeToPath(path.resolve(__dirname, `csv/oldest/page-${page}.csv`),
+            boats,{ headers: true })
+                .on('error', err => console.error(err))
+                .on('finish', () => console.log(`Done writing page ${page}`));
+        }, timeOut*1000);
+    }
+```
+  
+  \section{Additional information}
+
+## Known limitations
+The API can only return a maximum of 1000 results in a single query. A paging approach is used to retrieve more results. The API also has a maximum limit of 10,000 results in total (or 10 pages of 1000 results each). The later point is evidenced by the maximum number of pages on the search results being 357 with a page size of 28 results.
+
+The process in the script uses the paged API query to get back 10,000 results. The ordering parameter can be used to retrieve a larger data set by changing the `sort` parameter between `modified-asc` and `modified-desc` to return back the 10,000 earliest and 10,000 latest updated records respectively.
+
+
+## Running the script
+This was run on NodeJS with the following packages : `fast-csv@3.4.0` and `node-fetch@^2.6.0`.
+- Install all required dependencies
+- Run script : `node index.js`
+
+## Script availability
+The script is also made available on [GitHub](https://github.com/adhokshaja/SDM-Boattrader-Scraping).
+
+\newpage
+
+  
+
+
+
+
+
+
+

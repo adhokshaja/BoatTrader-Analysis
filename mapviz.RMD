@@ -1,0 +1,102 @@
+```{r include=FALSE}
+library(ggmap)
+library(zipcode)
+apiKey = "AIzaSyDA6TG2dM03244Vyd0WChghpatJvhP00Wk"
+register_google(apiKey)
+```
+
+
+
+Get a Map and Zipcode Data
+```{r}
+map<-get_map(location = "USA", zoom = 4)
+data(zipcode)
+```
+
+
+#### Mapping By State
+Calculate the Median Price by state.
+```{r}
+medianPrice.state<-  aggregate(data_noOutliers$price,
+                              by = list(data_noOutliers$state),
+                         FUN = median)
+names(medianPrice.state) <- c('geo','MedianPrice')
+
+countPrices.state <- aggregate(data_noOutliers$price,
+                         by = list(data_noOutliers$state),
+                         FUN = length)
+
+names(countPrices.state) <- c('geo','Count')
+priceAggregates.state <- merge(medianPrice.state,countPrices.state,by.x="geo", by.y="geo")
+
+
+
+medianlat<- aggregate(zipcode$latitude,
+                      by = list(zipcode$state),
+                      FUN = median)
+names(medianlat) <- c('geo','latitude')
+
+medianlng<- aggregate(zipcode$longitude,
+                      by = list(zipcode$state),
+                      FUN = median)
+names(medianlng) <- c('geo','longitude')
+
+medianlatlng <- merge(medianlat,medianlng,by.x="geo", by.y="geo")
+  
+
+priceAggregates.state <- merge(priceAggregates.state,medianlatlng,by.x="geo", by.y="geo")
+```
+
+
+```{r fig.width=7, fig.height=6}
+  
+ggmap(map)+ geom_point(
+  aes(x=longitude, y=latitude, colour=MedianPrice, size=Count), 
+  data=priceAggregates.state, alpha=.75, na.rm = T)  +   
+  scale_color_gradient(low="#2232FF", high="#ff3222")+
+  scale_size_continuous(range = c(6,10))+ggtitle("Price and Count of listings by State")
+
+```
+
+We can see that the number of listings in Florida is fairly large. Arkansas has the lowest price for boats and is also one of the smallest for number of listings. States not close to many bodies of water as expected have a smaller number of listings.
+
+
+#### Mapping By ZipCode
+
+Calculate the median price by zipcode
+
+```{r}
+
+
+medianPrice.Zip <-  aggregate(data_noOutliers$price,
+                         by = list(data_noOutliers$zip),
+                         FUN = median)
+names(medianPrice.Zip) <- c('geo','MedianPrice')
+
+countPrices.Zip <- aggregate(data_noOutliers$price,
+                         by = list(data_noOutliers$zip),
+                         FUN = length)
+
+names(countPrices.Zip) <- c('geo','Count')
+priceAggregates.Zip <- merge(medianPrice.Zip,countPrices.Zip,by.x="geo", by.y="geo")
+
+priceAggregates.Zip <- merge(priceAggregates.Zip,zipcode,by.x="geo", by.y="zip")
+
+```
+
+
+```{r fig.width=7, fig.height=6}
+
+ggmap(map)+ geom_point(
+  aes(x=longitude, y=latitude, colour=MedianPrice, size=Count), 
+  data=priceAggregates.Zip, alpha=.75, na.rm = T)  + 
+  scale_color_gradient(low="#2232FF", high="#ff3222")+
+  scale_size_continuous(range = c(1.5,5))+ggtitle("Price and Count of listings by Zipcode")
+
+```
+We can clearly see that the boat listings are concentrated along the atlantic and the gulf coasts with additional points around the great lakes area.
+San Diego, CA has one of the highest prices for boats along with the Florida panhandle and Chicago, IL regions. Furthemore, as expected, in land boat listings are also concentrated around bodies of water large enough for boating.
+
+```{r include=FALSE}
+remove(medianPrice.Zip ,medianPrice.state, medianlat, medianlng, medianlatlng, priceAggregates.state, priceAggregates.Zip, zipcode,map, countPrices.state, countPrices.Zip)
+```

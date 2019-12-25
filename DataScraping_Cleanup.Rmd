@@ -1,0 +1,198 @@
+# Data Extraction
+
+BoatTrader has an extensive search tool available at [boattrader.com/boats/](https://www.boattrader.com/boats/). This search tool lets users search and filter boats based on length, condition, year etc. At the time of writing, this page listed 106,775 results. However, the total number of results that can actually be retrieved is far less than the number shown. In practice, I found that only 10,000 of these results can actually be retrieved. 
+
+One approach to extract this data is to employ web scraping to extract the Urls for all the boat listings, and then, navigate to the individual listings to scrape data for indvidual boats. Luckily, however, when investigating a methodology to scrape the data, I realized that the search results was actually being made via and API call. Using the API proved very simple. The API allowed for querying on all the search params listed on the search page, but more interesting, the API also returns the various parameters for the boat, including make,model, length, engines, price(when available) etc. _Note: This API is not advertised publically. I came upon this API when I was looking for network requests made by the page._ 
+
+## Querying the API and generating Data sets
+The API can only return a maximum of 1000 results in a single query. A paging approach is used to retrieve more results. The API also has a maximum limit of 10,000 results in total (or 10 pages of 1000 results each).
+
+A paged querying approach was was implemented using JavaScript on NodeJS. The script used to perform this query is included in Appendix A of this report. The script generates 10 CSV files with 1,000 records each. The script was additionally run to get the 10,000 newest and 10,000 oldest records. The ordering newest and oldest is based on modified date and not created date. In total we have 20,000 records across 20 CSV files.
+
+### Returned Parameters
+The following parameters are returned in each CSV file
+
+- `id` - Unique ID for the record
+- `url` - Boat Trader URL for the boat
+- `type` -  Type of the boat
+- `boatClass` -  Class of the boat
+- `make` - Make of the Boat
+- `model` - Model of the Boat
+- `year` -  Year of the Boat
+- `condition` -  New/Used
+- `length_ft` - Nominal Length of the boat in ft
+- `beam_ft` - Beam of the Boat in ft
+- `dryWeight_lb` - Dry weight of the Boat in ft.
+- `created` -  Date the posting was created
+- `hullMaterial` -  Material of the Boat's Hull
+- `fuelType` -  Fuel type of the Boat
+- `numEngines` -  Number of Engines listed for the Boat
+- `maxEngineYear` - Newest engine Year
+- `minEngineYear` - Oldest Engine Year
+- `totalHP` - Total Power of the Engines combined (in HP)
+- `engineCategory` - Engine Category  ( note `multiple` is used when the engines are dissimilar)
+- `price` - Listing price for the boat in USD
+- `city`
+- `country` 
+- `state` 
+- `zip` 
+- `SellerId`
+
+## Aggregation
+Now that we have 20 CSV files, we will need to combine these into a Dataset and perform some cleanup. This section is done in R. 
+
+```{r include=FALSE}
+library(readr)
+library(dplyr)
+```
+
+### Reading and combining 10 "Oldest page" CSV files
+We can read the 10 csv files using the `read.csv` function. We combine the rows using `rbind` function. We remove the page variables from the global environment for housekeeping.
+
+```{r}
+page1 <- read.csv("./raw-csv/Oldest/page-1.csv");
+page2 <- read.csv("./raw-csv/Oldest/page-2.csv");
+page3 <- read.csv("./raw-csv/Oldest/page-3.csv");
+page4 <- read.csv("./raw-csv/Oldest/page-4.csv");
+page5 <- read.csv("./raw-csv/Oldest/page-5.csv");
+page6 <- read.csv("./raw-csv/Oldest/page-6.csv");
+page7 <- read.csv("./raw-csv/Oldest/page-7.csv");
+page8 <- read.csv("./raw-csv/Oldest/page-8.csv");
+page9 <- read.csv("./raw-csv/Oldest/page-9.csv");
+page10 <- read.csv("./raw-csv/Oldest/page-10.csv");
+# Merge rows of all the data sets
+oldest <- rbind(page1,page2,page3,page4,page5,page6,page7,page8,page9,page10)
+
+# we don't need the page variables in the environment anymore
+remove(page1,page2,page3,page4,page5,page6,page7,page8,page9,page10)
+```
+
+We have now succesfully read and combined the oldest records. We have `r nrow(oldest)` rows with `r ncol(oldest)` variables each.
+
+### Reading and combining 10 "Newest page" CSV files
+Repeating the same process with the 10 newest page files.
+
+```{r}
+page1 <- read.csv("./raw-csv/Newest/page-1.csv");
+page2 <- read.csv("./raw-csv/Newest/page-2.csv");
+page3 <- read.csv("./raw-csv/Newest/page-3.csv");
+page4 <- read.csv("./raw-csv/Newest/page-4.csv");
+page5 <- read.csv("./raw-csv/Newest/page-5.csv");
+page6 <- read.csv("./raw-csv/Newest/page-6.csv");
+page7 <- read.csv("./raw-csv/Newest/page-7.csv");
+page8 <- read.csv("./raw-csv/Newest/page-8.csv");
+page9 <- read.csv("./raw-csv/Newest/page-9.csv");
+page10 <- read.csv("./raw-csv/Newest/page-10.csv");
+# Merge rows of all the data sets
+newest <- rbind(page1,page2,page3,page4,page5,page6,page7,page8,page9,page10)
+
+# we don't need the page variables in the environment anymore
+remove(page1,page2,page3,page4,page5,page6,page7,page8,page9,page10)
+```
+
+We have now succesfully read and combined the newest records. We have `r nrow(newest)` rows with `r ncol(newest)` variables each.
+
+### Merging Oldest and Newest records
+
+```{r}
+data <- rbind(newest,oldest)
+remove(oldest,newest)
+#colnames(data)
+dim(data)
+```
+
+We now have a dataset with all the data points. We have a total of `r nrow(data)`. Data columns are `r colnames(data)`  
+
+# Data Cleanup
+
+The dataset might have duplicates due to the methodology used to extract the data. These duplicates need to be removed. We also have some unnecessary or redundant information in the data columns. We will output a single file with all the data points sans duplicates and columns not necessary for analysis.
+
+## Duplicate Removal
+We could have ended up with duplicates in the data. We can use either the `id` column or the `url` column to identify the duplicates. The rational here is each boat is tied to a specific url and a specific id. 
+
+```{r}
+dups <- duplicated(data$id)
+```
+
+We have identified `r summary(dups)[3]` duplicate records. These need to be removed. For now, we will hold on to this 
+vector, and combine with other removal criteria employeed below.
+
+## Removing Entries with no price
+
+One of features of BoatTrader listings is that the listing price cen be hidden by the listing creator. The listing price is only available by making a request to the creator of the listing. Since, we are trying to build a model to predict the price of a listing, the records with no price have no value to us currently. We could us this as a good data set for predicting the price once we have our final model. but for now, we will remove these from the cleaned data set.
+
+```{r}
+noprice <- is.na(data$price)
+```
+
+We have identified `r summary(noprice)[3]` records with no price. This is a substantial number at over 25% of our original dataset. But since these have no value for our analysis model, we will remove them.
+
+## Removing Entries with no state
+
+Since one of our primary goals is to analyse the price distribution across geographical boundaries, we will also remove data that have no state listed
+
+```{r}
+nostate <- data$state == ""
+```
+
+## Producing a cleaned dataset
+
+### Removing rows
+We will remove rows that were either duplicates or have no price listed. We will create a new dataframe `data_cleaned`.
+
+```{r}
+to_remove <- dups | noprice | nostate
+data_cleaned <- data[!to_remove,]
+```
+
+We are now left with `r nrow(data_cleaned)` records. This is only `r nrow(data_cleaned)/nrow(data)*100`% of the orignal mined data. While this is a significant reduction, this is still a farily large data set. Due to the limitations of the data mining approach, we will have to work with this data set. 
+
+### Transforming column variables and dropping unnecessary columns
+We have the columns `url` and `country` that are not necessary for the analysis. The country column is always _US_ since we were able to mine only US data.
+Further more, the created date can be parsed into month and year columns. This would be very helpful in our analysis. Especially if we wanted to make a seasonal analysis of some kind. We will also parse created into a more managable date format without the time aspect. Since, the time is too granualar and unnecessary in our analysis.
+
+```{r}
+data_cleaned$created_date <- as.Date(data_cleaned$created)
+data_cleaned$created_month <- format(data_cleaned$created_date,"%m")
+data_cleaned$created_year <- format(data_cleaned$created_date,"%Y")
+
+drops <- c("url","country","created")
+data_cleaned <- data_cleaned[,!(names(data_cleaned) %in% drops)]
+colnames(data_cleaned)
+```
+
+
+
+Going forward, we will be using the `data_cleaned` for our analysis.
+
+### Generating CSV files for output
+
+```{r include=FALSE}
+filename <- "Boats_Cleaned_dataset.csv"
+write.csv(data_cleaned,file=filename)
+```
+
+A CSV Version of the Cleaned Data set (_`r filename`_) is included with the submission. This is the dataset being used for analysis in the subsequent sections
+
+
+```{r include=FALSE}
+filename <- "Boats_No_Price_dataset.csv"
+data_np<- data[noprice,]
+data_np$created_date <- as.Date(data_np$created)
+data_np$created_month <- format(data_np$created_date,"%m")
+data_np$created_year <- format(data_np$created_date,"%Y")
+
+drops <- c("url","country","created")
+data_np <- data_np[,!(names(data_np) %in% drops)]
+write.csv(data_np,file=filename)
+```
+
+Additionally, a second csv file , _`r filename`_ , is generated with the boats data with no prices. We can also use this for predicting prices once we have a model. This file and the dataset is not used for any analysis in the subsequent sections.
+
+```{r include=FALSE}
+#house keeping,remove unnecessary variables
+remove(drops,dups,noprice,filename,data_np,data,to_remove,nostate)
+```
+
+
+Note: This is not the end of the cleanup. As we explore the data, we may need additional cleanup of data due to skewness of data or erronous data. 
